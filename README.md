@@ -178,6 +178,3 @@ DigitalTwinAssignment/
 ```bash
 cd client
 npm run build
-```
-This generates the optimized production bundle in `client/dist`.
-"# digitaltwinAssignment" 
