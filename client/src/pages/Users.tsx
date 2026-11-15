@@ -6,6 +6,7 @@ import Pagination from "../components/Pagination";
 import { PAGE_SIZE, useUsers } from "../context/useUsers";
 import type { User } from "../types";
 
+// The dialog state tells the page which popup should be displayed.
 type Dialog =
   | { kind: "create" }
   | { kind: "view"; user: User }
@@ -26,21 +27,28 @@ export default function Users() {
     updateUser,
     deleteUser,
   } = useUsers();
+
   const [dialog, setDialog] = useState<Dialog>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Close the popup and clear any previous delete error.
   const close = () => {
     setDialog(null);
     setDeleteError(null);
   };
 
-  async function confirmDelete(u: User) {
+  // Delete the selected user after the user confirms the action.
+  async function confirmDelete(user: User) {
     setDeleting(true);
+
     try {
-      await deleteUser(u._id);
+      await deleteUser(user._id);
       close();
-    } catch (e) {
-      setDeleteError(e instanceof Error ? e.message : "Could not delete user");
+    } catch (error) {
+      setDeleteError(
+        error instanceof Error ? error.message : "Could not delete user",
+      );
     } finally {
       setDeleting(false);
     }
@@ -50,15 +58,17 @@ export default function Users() {
     <>
       <div className="row between wrap">
         <h1>Users</h1>
+
         <div className="row">
           <input
             className="search"
             type="search"
             placeholder="Search name or email"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(event) => setSearch(event.target.value)}
             aria-label="Search users"
           />
+
           <button className="btn" onClick={() => setDialog({ kind: "create" })}>
             Add user
           </button>
@@ -70,6 +80,7 @@ export default function Users() {
           {error}
         </p>
       )}
+
       {loading && !users.length ? (
         <p className="muted">Loading…</p>
       ) : users.length === 0 ? (
@@ -93,32 +104,37 @@ export default function Users() {
                 </th>
               </tr>
             </thead>
+
             <tbody>
-              {users.map((u) => (
-                <tr key={u._id}>
-                  <td>{u.name}</td>
-                  <td>{u.email}</td>
-                  <td>{u.phone || "–"}</td>
-                  <td className="cap">{u.role}</td>
+              {users.map((user) => (
+                <tr key={user._id}>
+                  <td>{user.name}</td>
+                  <td>{user.email}</td>
+                  <td>{user.phone || "–"}</td>
+                  <td className="cap">{user.role}</td>
                   <td>
-                    <span className={`badge ${u.status}`}>{u.status}</span>
+                    <span className={`badge ${user.status}`}>
+                      {user.status}
+                    </span>
                   </td>
                   <td className="actions">
                     <button
                       className="link"
-                      onClick={() => setDialog({ kind: "view", user: u })}
+                      onClick={() => setDialog({ kind: "view", user })}
                     >
                       View
                     </button>
+
                     <button
                       className="link"
-                      onClick={() => setDialog({ kind: "edit", user: u })}
+                      onClick={() => setDialog({ kind: "edit", user })}
                     >
                       Edit
                     </button>
+
                     <button
                       className="link danger"
-                      onClick={() => setDialog({ kind: "delete", user: u })}
+                      onClick={() => setDialog({ kind: "delete", user })}
                     >
                       Delete
                     </button>
@@ -129,6 +145,7 @@ export default function Users() {
           </table>
         </div>
       )}
+
       <Pagination
         page={meta.page}
         totalPages={meta.totalPages}
@@ -137,51 +154,61 @@ export default function Users() {
         onChange={setPage}
       />
 
+      {/* Create a new user. */}
       {dialog?.kind === "create" && (
         <Modal title="Add user" onClose={close}>
           <UserForm
             submitLabel="Add user"
             onCancel={close}
-            onSubmit={async (v) => {
-              await createUser(v);
+            onSubmit={async (values) => {
+              await createUser(values);
               close();
             }}
           />
         </Modal>
       )}
+
+      {/* Edit the selected user. */}
       {dialog?.kind === "edit" && (
         <Modal title="Edit user" onClose={close}>
           <UserForm
             submitLabel="Save changes"
             initial={dialog.user}
             onCancel={close}
-            onSubmit={async (v) => {
-              await updateUser(dialog.user._id, v);
+            onSubmit={async (values) => {
+              await updateUser(dialog.user._id, values);
               close();
             }}
           />
         </Modal>
       )}
+
+      {/* Show the selected user's details. */}
       {dialog?.kind === "view" && (
         <Modal title="User details" onClose={close}>
           <UserDetails id={dialog.user._id} onClose={close} />
         </Modal>
       )}
+
+      {/* Ask for confirmation before deleting a user. */}
       {dialog?.kind === "delete" && (
         <Modal title="Delete user?" onClose={close}>
           <p>
             This permanently removes <strong>{dialog.user.name}</strong> (
             {dialog.user.email}). This can’t be undone.
           </p>
+
           {deleteError && (
             <p className="alert" role="alert">
               {deleteError}
             </p>
           )}
+
           <div className="row end">
             <button className="btn ghost" onClick={close}>
               Keep user
             </button>
+
             <button
               className="btn danger-solid"
               disabled={deleting}
