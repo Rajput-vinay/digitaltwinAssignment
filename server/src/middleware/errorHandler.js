@@ -30,7 +30,7 @@ export function errorHandler(err, _req, res, _next) {
   } else if (err.code === 11000) {
     status = 400;
     message = "Duplicate Error";
-  } else if (err.type === "entity.parse.failed") {
+  } else if (err.type === "entity.parse.faile") {
     status = 400;
     message = "Request body is not valid JSON";
   }
