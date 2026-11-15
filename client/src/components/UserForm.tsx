@@ -5,21 +5,34 @@ import type { Role, Status, UserInput } from "../types";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 type Errors = Partial<Record<keyof UserInput, string>>;
 
-function validate(v: UserInput): Errors {
-  const e: Errors = {};
-  if (!v.name.trim()) e.name = "Name is required";
-  if (!v.email.trim()) e.email = "Email is required";
-  else if (!EMAIL_RE.test(v.email.trim()))
-    e.email = "Enter a valid email address";
-  if (v.phone.trim() && !/^[+\d][\d\s\-()]{5,19}$/.test(v.phone.trim()))
-    e.phone = "Enter a valid phone number";
-  return e;
+// Check the form values before sending them to the backend.
+function validate(values: UserInput): Errors {
+  const errors: Errors = {};
+
+  if (!values.name.trim()) {
+    errors.name = "Name is required";
+  }
+
+  if (!values.email.trim()) {
+    errors.email = "Email is required";
+  } else if (!EMAIL_RE.test(values.email.trim())) {
+    errors.email = "Enter a valid email address";
+  }
+
+  if (
+    values.phone.trim() &&
+    !/^[+\d][\d\s\-()]{5,19}$/.test(values.phone.trim())
+  ) {
+    errors.phone = "Enter a valid phone number";
+  }
+
+  return errors;
 }
 
 interface Props {
   initial?: UserInput;
   submitLabel: string;
-  onSubmit: (v: UserInput) => Promise<void>;
+  onSubmit: (values: UserInput) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -29,6 +42,7 @@ export default function UserForm({
   onSubmit,
   onCancel,
 }: Props) {
+  // Use the supplied user values when editing; otherwise start with empty fields.
   const [values, setValues] = useState<UserInput>(
     initial ?? {
       name: "",
@@ -38,31 +52,53 @@ export default function UserForm({
       status: "active",
     },
   );
+
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const set = <K extends keyof UserInput>(k: K, v: UserInput[K]) =>
-    setValues((p) => ({ ...p, [k]: v }));
+  // Update one field without changing the other form values.
+  const updateField = <K extends keyof UserInput>(
+    fieldName: K,
+    fieldValue: UserInput[K],
+  ) => {
+    setValues((currentValues) => ({
+      ...currentValues,
+      [fieldName]: fieldValue,
+    }));
+  };
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    const found = validate(values);
-    setErrors(found);
-    if (Object.keys(found).length) return;
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+
+    // Stop here and show messages if any field is invalid.
+    const validationErrors = validate(values);
+    setErrors(validationErrors);
+
+    if (Object.keys(validationErrors).length > 0) {
+      return;
+    }
+
     setSaving(true);
     setFormError(null);
+
     try {
+      // Remove extra spaces before sending the data to the server.
       await onSubmit({
         ...values,
         name: values.name.trim(),
         email: values.email.trim(),
         phone: values.phone.trim(),
       });
-    } catch (err) {
-      if (err instanceof ApiError && err.fieldErrors)
-        setErrors(err.fieldErrors as Errors); // server-side validation
-      setFormError(err instanceof Error ? err.message : "Could not save user");
+    } catch (error) {
+      // Show field-specific errors returned by the backend.
+      if (error instanceof ApiError && error.fieldErrors) {
+        setErrors(error.fieldErrors as Errors);
+      }
+
+      setFormError(
+        error instanceof Error ? error.message : "Could not save user",
+      );
       setSaving(false);
     }
   }
@@ -73,59 +109,69 @@ export default function UserForm({
         Name
         <input
           value={values.name}
-          onChange={(e) => set("name", e.target.value)}
+          onChange={(event) => updateField("name", event.target.value)}
           autoFocus
           aria-invalid={!!errors.name}
         />
         {errors.name && <span className="err">{errors.name}</span>}
       </label>
+
       <label>
         Email
         <input
           type="email"
           value={values.email}
-          onChange={(e) => set("email", e.target.value)}
+          onChange={(event) => updateField("email", event.target.value)}
           aria-invalid={!!errors.email}
         />
         {errors.email && <span className="err">{errors.email}</span>}
       </label>
+
       <label>
         Phone <span className="muted small">(optional)</span>
         <input
           value={values.phone}
-          onChange={(e) => set("phone", e.target.value)}
+          onChange={(event) => updateField("phone", event.target.value)}
           aria-invalid={!!errors.phone}
         />
         {errors.phone && <span className="err">{errors.phone}</span>}
       </label>
+
       <div className="grid2">
         <label>
           Role
           <select
             value={values.role}
-            onChange={(e) => set("role", e.target.value as Role)}
+            onChange={(event) =>
+              updateField("role", event.target.value as Role)
+            }
           >
             <option value="admin">Admin</option>
             <option value="editor">Editor</option>
             <option value="viewer">Viewer</option>
           </select>
         </label>
+
         <label>
           Status
           <select
             value={values.status}
-            onChange={(e) => set("status", e.target.value as Status)}
+            onChange={(event) =>
+              updateField("status", event.target.value as Status)
+            }
           >
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </select>
         </label>
       </div>
+
       {formError && (
         <p className="alert" role="alert">
           {formError}
         </p>
       )}
+
       <div className="row end">
         <button type="button" className="btn ghost" onClick={onCancel}>
           Cancel
