@@ -18,6 +18,7 @@ interface PageMeta {
   total: number;
 }
 
+// This component stores the users data and makes it available to the app.
 export function UsersProvider({ children }: { children: ReactNode }) {
   const [users, setUsers] = useState<User[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -25,45 +26,64 @@ export function UsersProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearchState] = useState("");
   const [page, setPage] = useState(1);
+
   const [meta, setMeta] = useState<PageMeta>({
     page: 1,
     totalPages: 1,
     total: 0,
   });
 
-  const setSearch = useCallback((q: string) => {
-    setSearchState(q);
+  // When search text changes, start from the first page.
+  const setSearch = useCallback((searchText: string) => {
+    setSearchState(searchText);
     setPage(1);
   }, []);
 
+  // Load the current page of users and the dashboard statistics.
   const refresh = useCallback(async () => {
     try {
-      const [res, s] = await Promise.all([
-        userService.list({ q: search.trim(), page, limit: PAGE_SIZE }),
+      const [usersResponse, statsResponse] = await Promise.all([
+        userService.list({
+          q: search.trim(),
+          page,
+          limit: PAGE_SIZE,
+        }),
         userService.stats(),
       ]);
-      setUsers(res.data);
-      setMeta({ page: res.page, totalPages: res.totalPages, total: res.total });
-      if (res.page !== page) setPage(res.page); // server clamped (e.g. last item on the page was deleted)
-      setStats(s);
+
+      setUsers(usersResponse.data);
+      setMeta({
+        page: usersResponse.page,
+        totalPages: usersResponse.totalPages,
+        total: usersResponse.total,
+      });
+
+      // The backend may change the page number if the last user was deleted.
+      if (usersResponse.page !== page) {
+        setPage(usersResponse.page);
+      }
+
+      setStats(statsResponse);
       setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load users");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Failed to load users");
     } finally {
       setLoading(false);
     }
   }, [search, page]);
 
-  // Debounced fetch on search/page change, plus light polling so the dashboard stays live across tabs.
+  // Refresh after search/page changes and poll every 15 seconds.
   useEffect(() => {
-    const t = setTimeout(refresh, 250);
-    const poll = setInterval(refresh, POLL_MS);
+    const timeoutId = setTimeout(refresh, 250);
+    const intervalId = setInterval(refresh, POLL_MS);
+
     return () => {
-      clearTimeout(t);
-      clearInterval(poll);
+      clearTimeout(timeoutId);
+      clearInterval(intervalId);
     };
   }, [refresh]);
 
+  // Share the data and actions with every component using UsersContext.
   const value = useMemo<UsersState>(
     () => ({
       users,
@@ -75,14 +95,20 @@ export function UsersProvider({ children }: { children: ReactNode }) {
       meta,
       setPage,
       refresh,
-      createUser: async (d: UserInput) => {
-        await userService.create(d);
+
+      // Create a user, then reload the list.
+      createUser: async (data: UserInput) => {
+        await userService.create(data);
         await refresh();
       },
-      updateUser: async (id: string, d: UserInput) => {
-        await userService.update(id, d);
+
+      // Update a user, then reload the list.
+      updateUser: async (id: string, data: UserInput) => {
+        await userService.update(id, data);
         await refresh();
       },
+
+      // Delete a user, then reload the list.
       deleteUser: async (id: string) => {
         await userService.remove(id);
         await refresh();
@@ -92,6 +118,8 @@ export function UsersProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <UsersContext.Provider value={value}>{children}</UsersContext.Provider>
+    <UsersContext.Provider value={value}>
+      {children}
+    </UsersContext.Provider>
   );
 }
